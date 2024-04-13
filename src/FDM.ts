@@ -13,6 +13,7 @@ export function FDM(
   const l = U.length;
   const m = U[0].length;
   const n = U[0][0].length;
+  let t = 0;
 
   const u: Fn = (i, j, k) => U[(i + l) % l][(j + m) % m][(k + n) % n];
   const v: Fn = (i, j, k) => V[(i + l) % l][(j + m) % m][(k + n) % n];
@@ -30,13 +31,14 @@ export function FDM(
 
   function step(iters: Int): void {
     while (iters--) {
+      t += dt;
       const _U = makeGrid(l, m, n, () => 0);
       const _V = makeGrid(l, m, n, () => 0);
       for (let i = 0; i < l; ++i) {
         for (let j = 0; j < m; ++j) {
           for (let k = 0; k < n; ++k) {
             const du =
-              dudt(i, j, k, {
+              dudt(i, j, k, t, {
                 u,
                 v,
                 dudx,
@@ -47,7 +49,7 @@ export function FDM(
                 d2udz2,
               }) * dt;
             const dv =
-              dvdt(i, j, k, {
+              dvdt(i, j, k, t, {
                 u,
                 v,
                 dudx,
@@ -73,17 +75,21 @@ export function FDM(
   const index = (i: Int, j: Int, k: Int) => (i * m + j) * n + k;
 
   function toTexture(): THREE.Data3DTexture {
+    // let min = Infinity;
+    // let max = -Infinity;
+    // for (let i = 0; i < l; ++i) {
+    //   for (let j = 0; j < m; ++j) {
+    //     for (let k = 0; k < n; ++k) {
+    //       min = Math.min(min, u(i, j, k));
+    //       max = Math.max(max, u(i, j, k));
+    //     }
+    //   }
+    // }
+
+    let min = 0;
+    let max = 0.5;
+
     const data = new Uint8Array(l * m * n * 4);
-    let min = Infinity;
-    let max = -Infinity;
-    for (let i = 0; i < l; ++i) {
-      for (let j = 0; j < m; ++j) {
-        for (let k = 0; k < n; ++k) {
-          min = Math.min(min, u(i, j, k));
-          max = Math.max(max, u(i, j, k));
-        }
-      }
-    }
 
     for (let i = 0; i < l; ++i) {
       for (let j = 0; j < m; ++j) {

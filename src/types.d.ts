@@ -12,4 +12,4 @@ type HelperKeys =
   | "d2udy2"
   | "d2udz2";
 type Helper = Record<HelperKeys, Fn>;
-type UserFn = (i: Int, j: Int, k: Int, helper: Helper) => Float;
+type UserFn = (i: Int, j: Int, k: Int, t: Float, helper: Helper) => Float;

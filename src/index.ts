@@ -2,11 +2,11 @@ import { correctCameraUp, makeGrid } from "./utils";
 import { FDM } from "./FDM";
 import * as THREE from "three";
 
-const N = 40;
+const N = 30;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
-  50,
+  100,
   window.innerWidth / window.innerHeight,
   0.1,
   1000
@@ -26,7 +26,7 @@ const directionalLight2 = new THREE.DirectionalLight(0xffff00);
 directionalLight2.position.set(1, 0, 1);
 scene.add(directionalLight2);
 
-const CAMERA_DIST = 1;
+const CAMERA_DIST = 0.5;
 camera.translateY(-CAMERA_DIST);
 camera.lookAt(new THREE.Vector3());
 camera.up.set(0, 0, 1);
@@ -34,37 +34,46 @@ camera.up.set(0, 0, 1);
 // const axesHelper = new THREE.AxesHelper(5);
 // scene.add(axesHelper);
 
-const AMPLITUDE = 0.5;
-
 function rand(start: number, end: number) {
   return start + (end - start) * Math.random();
 }
 
-function initialValue(M: number): Fn {
+const AMPLITUDE = 2500;
+function initialValue(M: number): Grid {
   const gaussians: Array<[Float, Float, Float, Float, Float]> = [];
   for (let i = 0; i < M; ++i) {
-    const margin = 0.3;
+    const margin = 0.2;
     gaussians.push([
       rand(margin, 1 - margin) * N,
       rand(margin, 1 - margin) * N,
       rand(margin, 1 - margin) * N,
-      (AMPLITUDE / Math.sqrt(M)) * rand(0.1, 1),
-      rand(0.05, 0.5),
+      AMPLITUDE * rand(0.1, 1),
+      rand(1, 2),
     ]);
   }
-  return (i, j, k) => {
+  return makeGrid(N, N, N, (i, j, k) => {
     let u = 0;
     for (const [ci, cj, ck, ampl, m] of gaussians) {
       u +=
-        ampl * Math.exp(-m * ((i - ci) ** 2 + (j - cj) ** 2 + (k - ck) ** 2));
+        i == Math.round(ci) && j == Math.round(cj) && k == Math.round(ck)
+          ? ampl
+          : 0;
+      // u +=
+      //   ampl * Math.exp(-m * ((i - ci) ** 2 + (j - cj) ** 2 + (k - ck) ** 2));
     }
     return u;
-  };
+  });
 }
 
-const dudt: UserFn = (i, j, k, { v }) => v(i, j, k);
-const dvdt: UserFn = (i, j, k, { d2udx2, d2udy2, d2udz2 }) =>
-  50 * (d2udx2(i, j, k) + d2udy2(i, j, k) + d2udz2(i, j, k));
+const f = initialValue(100);
+
+const dudt: UserFn = (i, j, k, t, { v }) => v(i, j, k);
+const dvdt: UserFn = (i, j, k, t, { d2udx2, d2udy2, d2udz2 }) => {
+  return (
+    2000 * (d2udx2(i, j, k) + d2udy2(i, j, k) + d2udz2(i, j, k)) +
+    f[i][j][k] * Math.sin(10 * t)
+  );
+};
 
 // camera
 
@@ -129,7 +138,7 @@ function restart() {
   helpText.remove();
 
   const Sol = FDM(
-    makeGrid(N, N, N, initialValue(100)),
+    makeGrid(N, N, N, () => 0),
     makeGrid(N, N, N, () => 0),
     dudt,
     dvdt,
@@ -149,7 +158,7 @@ function restart() {
     prev = t;
 
     if (!pointerDown) {
-      camera.position.applyAxisAngle(camera.up, 0.01 * steps);
+      camera.position.applyAxisAngle(camera.up, 0.005 * steps);
       camera.lookAt(new THREE.Vector3());
     }
 
@@ -166,7 +175,7 @@ function restart() {
 
 function makeSlices(texture: THREE.Data3DTexture) {
   const W = 2;
-  const L = 100;
+  const L = 200;
   const vertices: number[] = [];
   const indices: number[] = [];
 
@@ -223,12 +232,12 @@ function makeSlices(texture: THREE.Data3DTexture) {
       out vec4 fragColor;
 
 			void main() {
-        if (length(vPos) < 0.5) {
-          fragColor = vec4(
-            texture(volume, vPos + vec3(.5, .5, .5)).rgb,
-            0.01
-          );
-        }
+        fragColor = length(vPos) < 0.5
+          ? vec4(
+              texture(volume, vPos + vec3(.5, .5, .5)).rgb,
+              0.01
+            )
+          : vec4(0.0, 0.0, 0.0, 0.0);
 			}
     `,
   });
