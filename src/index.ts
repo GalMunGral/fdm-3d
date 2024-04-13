@@ -93,7 +93,7 @@ window.addEventListener("pointermove", (e) => {
       const z = camera.position
         .clone()
         .normalize()
-        .multiplyScalar(1 / 2)
+        .multiplyScalar(0.25)
         .project(camera).z;
 
       return new THREE.Vector3(
