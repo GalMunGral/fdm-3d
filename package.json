@@ -1,0 +1,16 @@
+{
+  "scripts": {
+    "build": "esbuild ./src/index.ts --outdir=dist --bundle",
+    "dev": "npm run build -- --watch"
+  },
+  "devDependencies": {
+    "@types/three": "^0.163.0",
+    "esbuild": "^0.18.17",
+    "typescript": "^5.1.6"
+  },
+  "dependencies": {
+    "@types/d3": "^7.4.3",
+    "d3": "^7.9.0",
+    "three": "^0.163.0"
+  }
+}
