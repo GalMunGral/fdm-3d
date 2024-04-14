@@ -6,7 +6,7 @@ const N = 30;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
-  100,
+  75,
   window.innerWidth / window.innerHeight,
   0.1,
   1000
@@ -26,7 +26,7 @@ const directionalLight2 = new THREE.DirectionalLight(0xffff00);
 directionalLight2.position.set(1, 0, 1);
 scene.add(directionalLight2);
 
-const CAMERA_DIST = 0.5;
+const CAMERA_DIST = 0.75;
 camera.translateY(-CAMERA_DIST);
 camera.lookAt(new THREE.Vector3());
 camera.up.set(0, 0, 1);
@@ -58,8 +58,6 @@ function initialValue(M: number): Grid {
         i == Math.round(ci) && j == Math.round(cj) && k == Math.round(ck)
           ? ampl
           : 0;
-      // u +=
-      //   ampl * Math.exp(-m * ((i - ci) ** 2 + (j - cj) ** 2 + (k - ck) ** 2));
     }
     return u;
   });
@@ -71,7 +69,7 @@ const dudt: UserFn = (i, j, k, t, { v }) => v(i, j, k);
 const dvdt: UserFn = (i, j, k, t, { d2udx2, d2udy2, d2udz2 }) => {
   return (
     2000 * (d2udx2(i, j, k) + d2udy2(i, j, k) + d2udz2(i, j, k)) +
-    f[i][j][k] * Math.sin(10 * t)
+    f[i][j][k] * Math.sin(12 * t)
   );
 };
 
@@ -158,7 +156,7 @@ function restart() {
     prev = t;
 
     if (!pointerDown) {
-      camera.position.applyAxisAngle(camera.up, 0.005 * steps);
+      // camera.position.applyAxisAngle(camera.up, 0.01 * steps);
       camera.lookAt(new THREE.Vector3());
     }
 
