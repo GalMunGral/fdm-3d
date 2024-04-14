@@ -156,7 +156,7 @@ function restart() {
     prev = t;
 
     if (!pointerDown) {
-      // camera.position.applyAxisAngle(camera.up, 0.01 * steps);
+      camera.position.applyAxisAngle(camera.up, 0.01 * steps);
       camera.lookAt(new THREE.Vector3());
     }
 
