@@ -6,7 +6,7 @@ const N = 30;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
-  75,
+  50,
   window.innerWidth / window.innerHeight,
   0.1,
   1000
@@ -26,7 +26,7 @@ const directionalLight2 = new THREE.DirectionalLight(0xffff00);
 directionalLight2.position.set(1, 0, 1);
 scene.add(directionalLight2);
 
-const CAMERA_DIST = 0.75;
+const CAMERA_DIST = 1;
 camera.translateY(-CAMERA_DIST);
 camera.lookAt(new THREE.Vector3());
 camera.up.set(0, 0, 1);
