@@ -1,3 +1,1 @@
-Real-time visualization of numerical solutions of PDE using the finite-difference method (FDM)
-
-Examples: wave equation (left) & advection-diffusion equation (right)
+Real-time volumetric rendering of FDM solutions of PDEs
