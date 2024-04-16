@@ -1,6 +1,6 @@
 type Int = number;
 type Float = number;
-type Grid = Array<Array<Array<Float>>>;
+type Grid<T = Float> = Array<Array<Array<T>>>;
 type Fn = (i: Int, j: Int, k: Int) => Float;
 type HelperKeys =
   | "u"

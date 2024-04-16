@@ -26,11 +26,6 @@ const directionalLight2 = new THREE.DirectionalLight(0xffff00);
 directionalLight2.position.set(1, 0, 1);
 scene.add(directionalLight2);
 
-const CAMERA_DIST = 1;
-camera.translateY(-CAMERA_DIST);
-camera.lookAt(new THREE.Vector3());
-camera.up.set(0, 0, 1);
-
 // const axesHelper = new THREE.AxesHelper(5);
 // scene.add(axesHelper);
 
@@ -38,15 +33,23 @@ function rand(start: number, end: number) {
   return start + (end - start) * Math.random();
 }
 
-const AMPLITUDE = 2500;
-function initialValue(M: number): Grid {
+const AMPLITUDE = 5000;
+const RADIUS = 0.8;
+
+function makeFunction(M: number): Grid<(t: Float) => Float> {
+  const center = new THREE.Vector3(0.5, 0.5, 0.5);
   const gaussians: Array<[Float, Float, Float, Float, Float]> = [];
+
   for (let i = 0; i < M; ++i) {
-    const margin = 0.2;
+    let point = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+    while (point.distanceTo(center) > RADIUS) {
+      point = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+    }
+    point.multiplyScalar(N);
     gaussians.push([
-      rand(margin, 1 - margin) * N,
-      rand(margin, 1 - margin) * N,
-      rand(margin, 1 - margin) * N,
+      Math.round(point.x),
+      Math.round(point.y),
+      Math.round(point.z),
       AMPLITUDE * rand(0.1, 1),
       rand(1, 2),
     ]);
@@ -54,22 +57,19 @@ function initialValue(M: number): Grid {
   return makeGrid(N, N, N, (i, j, k) => {
     let u = 0;
     for (const [ci, cj, ck, ampl, m] of gaussians) {
-      u +=
-        i == Math.round(ci) && j == Math.round(cj) && k == Math.round(ck)
-          ? ampl
-          : 0;
+      u += i == ci && j == cj && k == ck ? ampl : 0;
     }
-    return u;
+    const f = Math.random() * 50;
+    return (t: Float) => u * Math.exp(-1 * t) * Math.sin(f * t);
   });
 }
 
-const f = initialValue(100);
+const f = makeFunction(20);
 
 const dudt: UserFn = (i, j, k, t, { v }) => v(i, j, k);
 const dvdt: UserFn = (i, j, k, t, { d2udx2, d2udy2, d2udz2 }) => {
   return (
-    2000 * (d2udx2(i, j, k) + d2udy2(i, j, k) + d2udz2(i, j, k)) +
-    f[i][j][k] * Math.sin(12 * t)
+    5000 * (d2udx2(i, j, k) + d2udy2(i, j, k) + d2udz2(i, j, k)) + f[i][j][k](t)
   );
 };
 
@@ -121,19 +121,12 @@ window.addEventListener("pointermove", (e) => {
 let rafHandle = -1;
 let mesh: THREE.Mesh | null = null;
 
-const helpText = document.querySelector("#help");
-const audio = document.querySelector("audio");
-
-window.onkeydown = restart;
-audio.onended = restart;
-
-function restart() {
-  document.body.requestFullscreen();
+(function restart() {
   cancelAnimationFrame(rafHandle);
 
-  audio.currentTime = 0;
-  audio.play();
-  helpText.remove();
+  camera.position.set(2, 2, 2);
+  camera.lookAt(new THREE.Vector3());
+  camera.up.set(0, 0, 1);
 
   const Sol = FDM(
     makeGrid(N, N, N, () => 0),
@@ -156,7 +149,7 @@ function restart() {
     prev = t;
 
     if (!pointerDown) {
-      camera.position.applyAxisAngle(camera.up, 0.01 * steps);
+      camera.position.applyAxisAngle(camera.up, 0.005 * steps);
       camera.lookAt(new THREE.Vector3());
     }
 
@@ -169,10 +162,12 @@ function restart() {
 
     rafHandle = requestAnimationFrame(render);
   });
-}
+
+  setTimeout(restart, 30000);
+})();
 
 function makeSlices(texture: THREE.Data3DTexture) {
-  const W = 2;
+  const W = 10;
   const L = 200;
   const vertices: number[] = [];
   const indices: number[] = [];
@@ -184,7 +179,7 @@ function makeSlices(texture: THREE.Data3DTexture) {
   );
 
   for (let i = 0; i < L; ++i) {
-    const z = -0.5 + (1 / L) * i;
+    const z = -1 + (2 / L) * i;
     vertices.push(
       ...[
         [-W, W, z],
@@ -230,11 +225,9 @@ function makeSlices(texture: THREE.Data3DTexture) {
       out vec4 fragColor;
 
 			void main() {
-        fragColor = length(vPos) < 0.5
-          ? vec4(
-              texture(volume, vPos + vec3(.5, .5, .5)).rgb,
-              0.01
-            )
+        vec3 color = texture(volume, vPos + vec3(.5, .5, .5)).rgb;
+        fragColor = max(max(abs(vPos.x), abs(vPos.y)), abs(vPos.z)) < 0.5 && length(color) > 0.0
+          ? vec4(color, 0.01)
           : vec4(0.0, 0.0, 0.0, 0.0);
 			}
     `,

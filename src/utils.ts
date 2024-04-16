@@ -1,11 +1,11 @@
 import * as THREE from "three";
 
-export function makeGrid(
+export function makeGrid<T>(
   l: Int,
   m: Int,
   n: Int,
-  fn: (i: Int, j: Int, k: Int) => Float
-): Grid {
+  fn: (i: Int, j: Int, k: Int) => T
+): Grid<T> {
   return Array(l)
     .fill(0)
     .map((_, i) =>

@@ -75,8 +75,8 @@ export function FDM(
   const index = (i: Int, j: Int, k: Int) => (i * m + j) * n + k;
 
   function toTexture(): THREE.Data3DTexture {
-    // let min = Infinity;
-    // let max = -Infinity;
+    let min = Infinity;
+    let max = -Infinity;
     // for (let i = 0; i < l; ++i) {
     //   for (let j = 0; j < m; ++j) {
     //     for (let k = 0; k < n; ++k) {
@@ -86,8 +86,8 @@ export function FDM(
     //   }
     // }
 
-    let min = 0;
-    let max = 0.5;
+    min = 0;
+    max = 0.05;
 
     const data = new Uint8Array(l * m * n * 4);
 
@@ -95,7 +95,7 @@ export function FDM(
       for (let j = 0; j < m; ++j) {
         for (let k = 0; k < n; ++k) {
           const t = (u(i, j, k) - min) / (max - min);
-          const color = d3.rgb(d3.interpolateInferno(t));
+          const color = d3.rgb(d3.interpolateViridis(t));
           const base = ((i * m + j) * n + k) * 4;
           data[base] = color.r;
           data[base + 1] = color.g;
