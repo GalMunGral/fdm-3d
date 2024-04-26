@@ -2,6 +2,7 @@
   "include": ["src/**/*"],
   "compilerOptions": {
     "target": "ESNext",
+    "module": "ESNext",
     "lib": ["ESNext", "DOM"],
     "types": ["./src/types.d.ts"],
     "noImplicitAny": true

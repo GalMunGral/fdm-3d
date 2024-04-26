@@ -2,8 +2,6 @@ import { correctCameraUp, makeGrid } from "./utils";
 import { FDM } from "./FDM";
 import * as THREE from "three";
 
-const N = 30;
-
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
   50,
@@ -25,53 +23,6 @@ scene.add(directionalLight1);
 const directionalLight2 = new THREE.DirectionalLight(0xffff00);
 directionalLight2.position.set(1, 0, 1);
 scene.add(directionalLight2);
-
-// const axesHelper = new THREE.AxesHelper(5);
-// scene.add(axesHelper);
-
-function rand(start: number, end: number) {
-  return start + (end - start) * Math.random();
-}
-
-const AMPLITUDE = 5000;
-const RADIUS = 0.8;
-
-function makeFunction(M: number): Grid<(t: Float) => Float> {
-  const center = new THREE.Vector3(0.5, 0.5, 0.5);
-  const gaussians: Array<[Float, Float, Float, Float, Float]> = [];
-
-  for (let i = 0; i < M; ++i) {
-    let point = new THREE.Vector3(Math.random(), Math.random(), Math.random());
-    while (point.distanceTo(center) > RADIUS) {
-      point = new THREE.Vector3(Math.random(), Math.random(), Math.random());
-    }
-    point.multiplyScalar(N);
-    gaussians.push([
-      Math.round(point.x),
-      Math.round(point.y),
-      Math.round(point.z),
-      AMPLITUDE * rand(0.1, 1),
-      rand(1, 2),
-    ]);
-  }
-  return makeGrid(N, N, N, (i, j, k) => {
-    let u = 0;
-    for (const [ci, cj, ck, ampl, m] of gaussians) {
-      u += i == ci && j == cj && k == ck ? ampl : 0;
-    }
-    const f = Math.random() * 50;
-    return (t: Float) => u * Math.exp(-1 * t) * Math.sin(f * t);
-  });
-}
-
-const f = makeFunction(20);
-
-const dudt: UserFn = (i, j, k, t, { v }) => v(i, j, k);
-const dvdt: UserFn = (i, j, k, t, { d2udx2, d2udy2, d2udz2 }) => {
-  return (
-    5000 * (d2udx2(i, j, k) + d2udy2(i, j, k) + d2udz2(i, j, k)) + f[i][j][k](t)
-  );
-};
 
 // camera
 
@@ -121,21 +72,17 @@ window.addEventListener("pointermove", (e) => {
 let rafHandle = -1;
 let mesh: THREE.Mesh | null = null;
 
-(function restart() {
+const vertexShaderSource = await (await fetch("./vol_vert.glsl")).text();
+const fragmentShaderSource = await (await fetch("./vol_frag.glsl")).text();
+
+(async function restart() {
   cancelAnimationFrame(rafHandle);
 
-  camera.position.set(2, 2, 2);
+  camera.position.set(1.5, 1.5, 1.5);
   camera.lookAt(new THREE.Vector3());
   camera.up.set(0, 0, 1);
 
-  const Sol = FDM(
-    makeGrid(N, N, N, () => 0),
-    makeGrid(N, N, N, () => 0),
-    dudt,
-    dvdt,
-    1,
-    0.0001
-  );
+  const Sol = await FDM(40, 1, 0.001);
 
   let prev = -1;
   let totalSteps = 0;
@@ -149,7 +96,7 @@ let mesh: THREE.Mesh | null = null;
     prev = t;
 
     if (!pointerDown) {
-      camera.position.applyAxisAngle(camera.up, 0.01 * steps);
+      camera.position.applyAxisAngle(camera.up, 0.005 * steps);
       camera.lookAt(new THREE.Vector3());
     }
 
@@ -163,7 +110,7 @@ let mesh: THREE.Mesh | null = null;
     rafHandle = requestAnimationFrame(render);
   });
 
-  setTimeout(restart, 30000);
+  setTimeout(restart, 20000);
 })();
 
 function makeSlices(texture: THREE.Data3DTexture) {
@@ -210,27 +157,8 @@ function makeSlices(texture: THREE.Data3DTexture) {
     uniforms: {
       volume: { value: texture },
     },
-    vertexShader: `
-      out vec3 vPos;
-
-      void main() {
-        vPos = position;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform sampler3D volume;
-
-			in vec3 vPos;
-      out vec4 fragColor;
-
-			void main() {
-        vec3 color = texture(volume, vPos + vec3(.5, .5, .5)).rgb;
-        fragColor = max(max(abs(vPos.x), abs(vPos.y)), abs(vPos.z)) < 0.5 && length(color) > 0.0
-          ? vec4(color, 0.01)
-          : vec4(0.0, 0.0, 0.0, 0.0);
-			}
-    `,
+    vertexShader: vertexShaderSource,
+    fragmentShader: fragmentShaderSource,
   });
 
   const mesh = new THREE.Mesh(geometry, material);

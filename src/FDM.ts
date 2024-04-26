@@ -1,102 +1,189 @@
 import * as THREE from "three";
-import { makeGrid } from "./utils";
 import * as d3 from "d3";
+import { createProgramFromScripts, rand } from "./utils";
 
-export function FDM(
-  U: Grid,
-  V: Grid,
-  dudt: UserFn,
-  dvdt: UserFn,
-  h: Float,
-  dt: Float
-) {
-  const l = U.length;
-  const m = U[0].length;
-  const n = U[0][0].length;
-  let t = 0;
+const canvas = new OffscreenCanvas(1, 1);
+const gl = canvas.getContext("webgl2")!;
+const program = await createProgramFromScripts(
+  gl,
+  "./FDM_vert.glsl",
+  "./FDM_frag.glsl"
+);
 
-  const u: Fn = (i, j, k) => U[(i + l) % l][(j + m) % m][(k + n) % n];
-  const v: Fn = (i, j, k) => V[(i + l) % l][(j + m) % m][(k + n) % n];
+gl.getExtension("EXT_color_buffer_float");
 
-  const dudx: Fn = (i, j, k) => (u(i, j, k + 1) - u(i, j, k - 1)) / (2 * h);
-  const dudy: Fn = (i, j, k) => (u(i, j + 1, k) - u(i, j - 1, k)) / (2 * h);
-  const dudz: Fn = (i, j, k) => (u(i + 1, j, k) - u(i - 1, j, k)) / (2 * h);
+const vertices = [-1, 1, 1, 1, -1, -1, 1, -1];
+var buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+var positionLoc = gl.getAttribLocation(program, "ndcCoord");
+gl.enableVertexAttribArray(positionLoc);
+gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
 
-  const d2udx2: Fn = (i, j, k) =>
-    (u(i, j, k - 1) - 2 * u(i, j, k) + u(i, j, k + 1)) / h ** 2;
-  const d2udy2: Fn = (i, j, k) =>
-    (u(i, j - 1, k) - 2 * u(i, j, k) + u(i, j + 1, k)) / h ** 2;
-  const d2udz2: Fn = (i, j, k) =>
-    (u(i - 1, j, k) - 2 * u(i, j, k) + u(i + 1, j, k)) / h ** 2;
+const indexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+const indices = [2, 1, 0, 1, 2, 3];
+gl.bufferData(
+  gl.ELEMENT_ARRAY_BUFFER,
+  new Uint16Array(indices),
+  gl.STATIC_DRAW
+);
 
-  function step(iters: Int): void {
-    while (iters--) {
-      t += dt;
-      const _U = makeGrid(l, m, n, () => 0);
-      const _V = makeGrid(l, m, n, () => 0);
-      for (let i = 0; i < l; ++i) {
-        for (let j = 0; j < m; ++j) {
-          for (let k = 0; k < n; ++k) {
-            const du =
-              dudt(i, j, k, t, {
-                u,
-                v,
-                dudx,
-                dudy,
-                dudz,
-                d2udx2,
-                d2udy2,
-                d2udz2,
-              }) * dt;
-            const dv =
-              dvdt(i, j, k, t, {
-                u,
-                v,
-                dudx,
-                dudy,
-                dudz,
-                d2udx2,
-                d2udy2,
-                d2udz2,
-              }) * dt;
+export function createImage(
+  gl: WebGL2RenderingContext,
+  N: int,
+  init: Float32Array
+): WebGLTexture {
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RG32F,
+    N,
+    N * N,
+    0,
+    gl.RG,
+    gl.FLOAT,
+    init,
+    0
+  );
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return texture;
+}
 
-            if (isNaN(du) || isNaN(dv)) throw new Error("NaN");
+export async function FDM(N: int, h: float, dt: float) {
+  canvas.width = N;
+  canvas.height = N * N;
+  gl.viewport(0, 0, N, N * N);
+  gl.useProgram(program);
 
-            _U[i][j][k] = U[i][j][k] + du;
-            _V[i][j][k] = V[i][j][k] + dv;
-          }
-        }
+  const AMPLITUDE = 5000;
+  const RADIUS = 0.8;
+
+  // initial values
+  const center = new THREE.Vector3(0.5, 0.5, 0.5);
+  const gaussians: Array<[float, float, float, float]> = [];
+
+  const M = 30;
+  for (let i = 0; i < M; ++i) {
+    let point = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+    while (point.distanceTo(center) > RADIUS) {
+      point = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+    }
+    point.multiplyScalar(N);
+    gaussians.push([
+      Math.round(point.x),
+      Math.round(point.y),
+      Math.round(point.z),
+      AMPLITUDE * rand(0, 2),
+    ]);
+  }
+
+  const FREQ = 5;
+
+  const fs = Array(N * N * N)
+    .fill(0)
+    .map((_, idx) => {
+      const i = Math.floor(idx / (N * N));
+      const j = Math.floor(idx / N) % N;
+      const k = idx % N;
+      let u = 0;
+      for (const [ci, cj, ck, ampl] of gaussians) {
+        u += i == ci && j == cj && k == ck ? ampl : 0;
       }
-      U = _U;
-      V = _V;
+      const f = Math.random() * FREQ;
+      return (t: float) => u * Math.exp(-1 * t) * Math.sin(f * t);
+    });
+
+  const F = (t: float) => fs.map((f) => f(t));
+
+  const fTexture = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, fTexture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+  let texture0 = createImage(gl, N, new Float32Array(N * N * N * 2).fill(0));
+  let texture1 = createImage(gl, N, new Float32Array(N * N * N * 2).fill(0));
+
+  gl.uniform1i(gl.getUniformLocation(program, "UV"), 0);
+  gl.uniform1i(gl.getUniformLocation(program, "F"), 1);
+  gl.uniform1f(gl.getUniformLocation(program, "N"), N);
+  gl.uniform1f(gl.getUniformLocation(program, "h"), h);
+  gl.uniform1f(gl.getUniformLocation(program, "dt"), dt);
+
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+
+  let t = 0;
+  function step(n: int) {
+    while (n--) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, fTexture);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.R32F,
+        N,
+        N * N,
+        0,
+        gl.RED,
+        gl.FLOAT,
+        new Float32Array(F(t)),
+        0
+      );
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, texture0);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        texture1,
+        0
+      );
+
+      gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+
+      [texture0, texture1] = [texture1, texture0];
+      t += dt;
     }
   }
 
-  const index = (i: Int, j: Int, k: Int) => (i * m + j) * n + k;
+  step(1);
 
+  const index = (i: int, j: int, k: int) => (i * N + j) * N + k;
+
+  const UV = new Float32Array(N * N * N * 2).fill(0);
   function toTexture(): THREE.Data3DTexture {
+    gl.readPixels(0, 0, N, N * N, gl.RG, gl.FLOAT, UV, 0);
+
     let min = Infinity;
     let max = -Infinity;
-    // for (let i = 0; i < l; ++i) {
-    //   for (let j = 0; j < m; ++j) {
-    //     for (let k = 0; k < n; ++k) {
-    //       min = Math.min(min, u(i, j, k));
-    //       max = Math.max(max, u(i, j, k));
+    // for (let i = 0; i < N; ++i) {
+    //   for (let j = 0; j < N; ++j) {
+    //     for (let k = 0; k < N; ++k) {
+    //       min = Math.min(min, UV[index(i, j, k) * 2]);
+    //       max = Math.max(max, UV[index(i, j, k) * 2]);
     //     }
     //   }
     // }
 
-    min = 0;
-    max = 0.05;
+    min = -0.5;
+    max = 2;
 
-    const data = new Uint8Array(l * m * n * 4);
+    const data = new Uint8Array(N * N * N * 4);
 
-    for (let i = 0; i < l; ++i) {
-      for (let j = 0; j < m; ++j) {
-        for (let k = 0; k < n; ++k) {
-          const t = (u(i, j, k) - min) / (max - min);
-          const color = d3.rgb(d3.interpolateViridis(t));
-          const base = ((i * m + j) * n + k) * 4;
+    for (let i = 0; i < N; ++i) {
+      for (let j = 0; j < N; ++j) {
+        for (let k = 0; k < N; ++k) {
+          const t = (UV[index(i, j, k) * 2] - min) / (max - min);
+          const color = d3.rgb(d3.interpolateMagma(t));
+          const base = index(i, j, k) * 4;
           data[base] = color.r;
           data[base + 1] = color.g;
           data[base + 2] = color.b;
@@ -104,7 +191,7 @@ export function FDM(
       }
     }
 
-    const texture = new THREE.Data3DTexture(data, n, m, l);
+    const texture = new THREE.Data3DTexture(data, N, N, N);
     texture.format = THREE.RGBAFormat;
     texture.type = THREE.UnsignedByteType;
     texture.minFilter = texture.magFilter = THREE.LinearFilter;
@@ -113,50 +200,8 @@ export function FDM(
     return texture;
   }
 
-  function toMesh(i: Int): THREE.Mesh {
-    const vertices: number[] = [];
-    for (let j = 0; j < m; ++j) {
-      for (let k = 0; k < n; ++k) {
-        vertices.push(k / (n - 1), j / (m - 1), u(i, j, k) / 2);
-      }
-    }
-
-    const indices: number[] = [];
-    for (let j = 1; j < m; ++j) {
-      for (let k = 1; k < n; ++k) {
-        indices.push(
-          index(i, j - 1, k - 1),
-          index(i, j, k),
-          index(i, j, k - 1)
-        );
-        indices.push(
-          index(i, j, k),
-          index(i, j - 1, k - 1),
-          index(i, j - 1, k)
-        );
-      }
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setIndex(indices);
-    geometry.setAttribute(
-      "position",
-      new THREE.BufferAttribute(new Float32Array(vertices), 3)
-    );
-    geometry.computeVertexNormals();
-
-    const material = new THREE.MeshStandardMaterial({
-      color: 0xff0000,
-      roughness: 0,
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-
-    return mesh;
-  }
-
   return {
     step,
-    toMesh,
     toTexture,
   };
 }

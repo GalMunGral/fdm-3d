@@ -1,15 +1,6 @@
-type Int = number;
-type Float = number;
-type Grid<T = Float> = Array<Array<Array<T>>>;
-type Fn = (i: Int, j: Int, k: Int) => Float;
-type HelperKeys =
-  | "u"
-  | "v"
-  | "dudx"
-  | "dudy"
-  | "dudz"
-  | "d2udx2"
-  | "d2udy2"
-  | "d2udz2";
+type int = number;
+type float = number;
+type Fn = (i: int, j: int) => float;
+type HelperKeys = "u" | "v" | "dudx" | "dudy" | "d2udx2" | "d2udy2";
 type Helper = Record<HelperKeys, Fn>;
-type UserFn = (i: Int, j: Int, k: Int, t: Float, helper: Helper) => Float;
+type UserFn = (i: int, j: int, helper: Helper) => float;
