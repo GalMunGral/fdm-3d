@@ -159,6 +159,7 @@ export async function FDM(N: int, h: float, dt: float) {
   const index = (i: int, j: int, k: int) => (i * N + j) * N + k;
 
   const UV = new Float32Array(N * N * N * 2).fill(0);
+
   function toTexture(): THREE.Data3DTexture {
     gl.readPixels(0, 0, N, N * N, gl.RG, gl.FLOAT, UV, 0);
 
@@ -200,8 +201,43 @@ export async function FDM(N: int, h: float, dt: float) {
     return texture;
   }
 
+  function toRealTexture() {
+    gl.readPixels(0, 0, N, N * N, gl.RG, gl.FLOAT, UV, 0);
+
+    let min = Infinity;
+    let max = -Infinity;
+    // for (let i = 0; i < N; ++i) {
+    //   for (let j = 0; j < N; ++j) {
+    //     for (let k = 0; k < N; ++k) {
+    //       min = Math.min(min, UV[index(i, j, k) * 2]);
+    //       max = Math.max(max, UV[index(i, j, k) * 2]);
+    //     }
+    //   }
+    // }
+
+    min = -0.5;
+    max = 2;
+
+    const data = new Uint8Array(N * N * N * 4);
+
+    for (let i = 0; i < N; ++i) {
+      for (let j = 0; j < N; ++j) {
+        for (let k = 0; k < N; ++k) {
+          const t = (UV[index(i, j, k) * 2] - min) / (max - min);
+          const color = d3.rgb(d3.interpolateMagma(t));
+          const base = index(i, j, k) * 4;
+          data[base] = color.r;
+          data[base + 1] = color.g;
+          data[base + 2] = color.b;
+        }
+      }
+    }
+    return { N, data };
+  }
+
   return {
     step,
     toTexture,
+    toRealTexture,
   };
 }
