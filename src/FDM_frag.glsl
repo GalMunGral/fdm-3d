@@ -4,6 +4,7 @@ precision mediump float;
 uniform sampler2D UV;
 uniform sampler2D F;
 uniform float N;
+uniform float c;
 uniform float h;
 uniform float dt;
 
@@ -34,7 +35,7 @@ void main() {
       (u(x, y, z - 1.0) - 2.0 * u(x, y, z) + u(x, y, z + 1.0)) / (h * h);
 
   float dudt = v(x, y, z);
-  float dvdt = 100.0 * (d2udx2 + d2udy2 + d2udz2) + f(x, y, z); // wave equation
+  float dvdt = c * (d2udx2 + d2udy2 + d2udz2) + f(x, y, z); // wave equation
 
   fragColor.x = u(x, y, z) + dt * dudt;
   fragColor.y = v(x, y, z) + dt * dvdt;
