@@ -5,17 +5,26 @@ export class RayCasting {
   private gl: WebGL2RenderingContext | null = null;
   private program: WebGLProgram | null = null;
 
-  private eye = new THREE.Vector3(20, 20, 0);
+  private eye = new THREE.Vector3(20, 20, 10);
   private forward = new THREE.Vector3();
   private up = new THREE.Vector3(0, 0, 1);
   private right = new THREE.Vector3();
+  private focus = 0.1;
+  private fov = Math.PI / 4;
 
+  private e1 = new THREE.Vector3(1, 0, 0);
+  private e2 = new THREE.Vector3(0, 1, 0);
+  private e3 = new THREE.Vector3(0, 0, 1);
+
+  private keydown: Record<string, boolean> = {};
   private pointerDown = false;
   private prevX = -1;
   private prevY = -1;
 
   constructor(canvas: HTMLCanvasElement) {
     (async () => {
+      this.adjustCameraFrame();
+
       const r = 1;
       canvas.width = window.innerWidth / r;
       canvas.height = window.innerHeight / r;
@@ -56,39 +65,49 @@ export class RayCasting {
       gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
+      window.addEventListener("keydown", (e) => {
+        this.keydown[e.key] = true;
+      });
+
+      window.addEventListener("keyup", (e) => {
+        this.keydown[e.key] = false;
+      });
+
       window.addEventListener("pointerdown", (e) => {
         this.pointerDown = true;
         this.prevX = e.clientX;
         this.prevY = e.clientY;
       });
-      window.addEventListener("pointerup", () => (this.pointerDown = false));
 
-      const scale = Math.max(canvas.width, canvas.height);
+      window.addEventListener("pointerup", () => (this.pointerDown = false));
 
       window.addEventListener("pointermove", (e) => {
         if (this.pointerDown) {
-          const quaternion = new THREE.Quaternion();
-          const dist = this.eye.length();
-          const toDir = (x: number, y: number) => {
-            x = (((x - canvas.width / 2) / scale) * dist) / 0.7;
-            y = (((y - canvas.height / 2) / scale) * dist) / 0.7;
-            return this.eye
-              .clone()
-              .add(this.right.clone().multiplyScalar(x))
-              .add(this.up.clone().multiplyScalar(y));
-          };
-          quaternion.setFromUnitVectors(
-            toDir(e.clientX, e.clientY),
-            toDir(this.prevX, this.prevY)
-          );
+          const q = new THREE.Quaternion()
+            .setFromUnitVectors(
+              this.toDir(this.prevX, this.prevY),
+              this.toDir(e.clientX, e.clientY)
+            )
+            .normalize();
 
-          this.eye.applyQuaternion(quaternion);
-          this.adjustCameraFrame();
+          this.e1.applyQuaternion(q);
+          this.e2.applyQuaternion(q);
+          this.e3.applyQuaternion(q);
+
           this.prevX = e.clientX;
           this.prevY = e.clientY;
         }
       });
     })();
+  }
+
+  private toDir(x: number, y: number): THREE.Vector3 {
+    return this.eye
+      .clone()
+      .multiplyScalar(5)
+      .add(this.right.clone().multiplyScalar(x - this.gl.canvas.width / 2))
+      .add(this.up.clone().multiplyScalar(-(y - this.gl.canvas.height / 2)))
+      .normalize();
   }
 
   private adjustCameraFrame() {
@@ -97,21 +116,30 @@ export class RayCasting {
     this.up = this.right.clone().cross(this.forward).normalize();
   }
 
-  public rotate(angle: number) {
+  public rotateAboutZ(angle: float) {
     if (!this.pointerDown) {
-      this.eye.applyAxisAngle(this.up, -angle);
-      this.adjustCameraFrame();
+      const z = new THREE.Vector3(0, 0, 1);
+      this.e1.applyAxisAngle(z, angle);
+      this.e2.applyAxisAngle(z, angle);
+      this.e3.applyAxisAngle(z, angle);
     }
   }
 
-  public render(N: number, data: Uint8Array) {
+  public render(texture3d: Uint8Array, N: int, dt: float) {
     const { gl, program } = this;
+    const { width, height } = gl.canvas;
+
     if (!program) return;
 
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-    gl.useProgram(program);
+    if (this.keydown["ArrowUp"]) {
+      this.fov += dt * 0.001;
+    }
+    if (this.keydown["ArrowDown"]) {
+      this.fov -= dt * 0.001;
+    }
 
-    const loc = (name: string) => gl.getUniformLocation(program, name);
+    gl.viewport(0, 0, width, height);
+    gl.useProgram(program);
 
     gl.texImage3D(
       gl.TEXTURE_3D,
@@ -123,18 +151,30 @@ export class RayCasting {
       0,
       gl.RGBA,
       gl.UNSIGNED_BYTE,
-      data
+      texture3d
     );
 
-    gl.uniform2fv(
-      loc(`viewport`),
-      new Float32Array([gl.canvas.width, gl.canvas.height])
+    const L = (name: string) => gl.getUniformLocation(program, name);
+
+    gl.uniform1i(L(`volume`), 0);
+    gl.uniform2fv(L(`viewport`), new Float32Array([width, height]));
+    gl.uniformMatrix3fv(
+      L(`R_inv`),
+      false,
+      new Float32Array(
+        [
+          [this.e1.x, this.e2.x, this.e3.x],
+          [this.e1.y, this.e2.y, this.e3.y],
+          [this.e1.z, this.e2.z, this.e3.z],
+        ].flat()
+      )
     );
-    gl.uniform3fv(loc(`eye`), new Float32Array(this.eye));
-    gl.uniform3fv(loc(`forward`), new Float32Array(this.forward));
-    gl.uniform3fv(loc(`up`), new Float32Array(this.up));
-    gl.uniform3fv(loc(`right`), new Float32Array(this.right));
-    gl.uniform1i(loc(`volume`), 0);
+    gl.uniform1f(L(`focus`), this.focus);
+    gl.uniform1f(L(`fov`), this.fov);
+    gl.uniform3fv(L(`eye`), new Float32Array(this.eye));
+    gl.uniform3fv(L(`forward`), new Float32Array(this.forward));
+    gl.uniform3fv(L(`up`), new Float32Array(this.up));
+    gl.uniform3fv(L(`right`), new Float32Array(this.right));
 
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);

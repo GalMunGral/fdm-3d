@@ -5,12 +5,55 @@ import { FDM } from "./FDM";
 import { rand } from "./utils";
 import { RayCasting } from "./RayCasting";
 
+let rafHandle = -1;
+(function reset() {
+  cancelAnimationFrame(rafHandle);
+  const canvas = document.querySelector("canvas")!;
+  const renderer = new RayCasting(canvas);
+
+  const transfer = (t: float) => d3.rgb(d3.interpolateViridis(t));
+
+  const N = 50;
+  const h = 1;
+  const dt = 0.01;
+
+  const c = 50;
+
+  const M = 10;
+  const amplitude = 5000;
+  const radius = 0.8;
+
+  const min = -1;
+  const max = 5;
+
+  const data = new Uint8Array(N * N * N * 4);
+  const source = createSourceTerm(N, M, radius, amplitude);
+  const sol = new FDM(N, h, dt, c, source);
+
+  let prev = -1;
+
+  rafHandle = requestAnimationFrame(function frame(t: DOMHighResTimeStamp) {
+    if (prev < 0) prev = t;
+    const dt = t - prev;
+
+    const steps = Math.min(10, Math.round(dt / 10));
+    sol.step(1);
+    sol.visualize(data, transfer, min, max);
+
+    renderer.render(data, N, dt);
+    renderer.rotateAboutZ(0.0005 * dt);
+
+    prev = t;
+    rafHandle = requestAnimationFrame(frame);
+  });
+  setTimeout(reset, 15 * 1000);
+})();
+
 function createSourceTerm(
   N: int,
   M: int,
   radius: float,
-  amplitude: float,
-  freq: float
+  amplitude: float
 ): (t: float) => Array<float> {
   const center = new THREE.Vector3(0.5, 0.5, 0.5);
   const gaussians: Array<[float, float, float, float]> = [];
@@ -39,51 +82,8 @@ function createSourceTerm(
       for (const [ci, cj, ck, ampl] of gaussians) {
         u += i == ci && j == cj && k == ck ? ampl : 0;
       }
-      const f = Math.random() * freq;
-      return (t: float) => u * Math.exp(-1 * t) * Math.sin(f * t);
+      return (t: float) => u * Math.exp(-0.1 * t);
     });
 
   return (t: float) => fs.map((f) => f(t));
 }
-
-let rafHandle = -1;
-(function reset() {
-  cancelAnimationFrame(rafHandle);
-  const canvas = document.querySelector("canvas")!;
-  const renderer = new RayCasting(canvas);
-
-  const transfer = (t: float) => d3.rgb(d3.interpolateViridis(t));
-
-  const N = 50;
-  const h = 1;
-  const dt = 0.01;
-  const c = 10;
-  const M = 30;
-  const amplitude = 5000;
-  const radius = 0.8;
-  const freq = 1;
-  const min = -0.5;
-  const max = 2;
-
-  const data = new Uint8Array(N * N * N * 4);
-  const source = createSourceTerm(N, M, radius, amplitude, freq);
-  const sol = new FDM(N, h, dt, c, source);
-
-  let prev = -1;
-
-  requestAnimationFrame(function frame(t: DOMHighResTimeStamp) {
-    if (prev < 0) prev = t;
-    const dt = t - prev;
-
-    const steps = Math.min(10, Math.round(dt / 10));
-    sol.step(1);
-    sol.visualize(data, transfer, min, max);
-
-    renderer.render(N, data);
-    renderer.rotate(0.0005 * dt);
-
-    prev = t;
-    requestAnimationFrame(frame);
-  });
-  setTimeout(reset, 15 * 1000);
-})();
