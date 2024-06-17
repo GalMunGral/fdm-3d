@@ -5,56 +5,61 @@ import { FDM } from "./FDM";
 import { rand } from "./utils";
 import { RayCasting } from "./RayCasting";
 
-let rafHandle = -1;
-(function reset() {
-  cancelAnimationFrame(rafHandle);
+(async function main() {
   const canvas = document.querySelector("canvas")!;
   const renderer = new RayCasting(canvas);
 
-  const transfer = (t: float) => d3.rgb(d3.interpolateViridis(t));
+  const transfer = (t: float) => d3.rgb(d3.interpolateInferno(t));
 
-  const N = 50;
+  const N = 25;
   const h = 1;
   const dt = 0.01;
 
-  const c = 50;
+  const c = 2;
 
   const M = 10;
-  const amplitude = 5000;
-  const radius = 0.8;
+  const amplitude = 100;
+  const radius = 0.5;
 
-  const min = -1;
-  const max = 5;
+  const min = 0;
+  const max = 50;
 
   const data = new Uint8Array(N * N * N * 4);
-  const source = createSourceTerm(N, M, radius, amplitude);
-  const sol = new FDM(N, h, dt, c, source);
+  const sol = new FDM(N, h, dt, c);
 
-  let prev = -1;
+  await sol.initialized;
 
-  rafHandle = requestAnimationFrame(function frame(t: DOMHighResTimeStamp) {
-    if (prev < 0) prev = t;
-    const dt = t - prev;
+  let rafHandle = -1;
+  (function reset() {
+    cancelAnimationFrame(rafHandle);
 
-    const steps = Math.min(10, Math.round(dt / 10));
-    sol.step(1);
-    sol.visualize(data, transfer, min, max);
+    sol.reset(initialValues(N, M, radius, amplitude));
 
-    renderer.render(data, N, dt);
-    renderer.rotateAboutZ(0.0005 * dt);
+    let prev = -1;
+    rafHandle = requestAnimationFrame(function frame(t: DOMHighResTimeStamp) {
+      if (prev < 0) prev = t;
+      const dt = t - prev;
 
-    prev = t;
-    rafHandle = requestAnimationFrame(frame);
-  });
-  setTimeout(reset, 15 * 1000);
+      const steps = Math.min(10, Math.round(dt / 10));
+      sol.step(steps);
+      sol.visualize(data, transfer, min, max);
+
+      renderer.render(data, N, dt);
+      renderer.rotateAboutZ(0.0005 * dt);
+
+      prev = t;
+      rafHandle = requestAnimationFrame(frame);
+    });
+    setTimeout(reset, 5 * 1000);
+  })();
 })();
 
-function createSourceTerm(
+function initialValues(
   N: int,
   M: int,
   radius: float,
   amplitude: float
-): (t: float) => Array<float> {
+): Array<float> {
   const center = new THREE.Vector3(0.5, 0.5, 0.5);
   const gaussians: Array<[float, float, float, float]> = [];
 
@@ -72,7 +77,7 @@ function createSourceTerm(
     ]);
   }
 
-  const fs = Array(N * N * N)
+  return Array(N * N * N)
     .fill(0)
     .map((_, idx) => {
       const i = Math.floor(idx / (N * N));
@@ -80,10 +85,9 @@ function createSourceTerm(
       const k = idx % N;
       let u = 0;
       for (const [ci, cj, ck, ampl] of gaussians) {
-        u += i == ci && j == cj && k == ck ? ampl : 0;
+        const rsqrd = (i - ci) ** 2 + (j - cj) ** 2 + (k - ck) ** 2;
+        u += ampl * Math.exp(-0.1 * rsqrd);
       }
-      return (t: float) => u * Math.exp(-0.1 * t);
+      return u;
     });
-
-  return (t: float) => fs.map((f) => f(t));
 }

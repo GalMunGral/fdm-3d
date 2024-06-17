@@ -5,7 +5,7 @@ export class RayCasting {
   private gl: WebGL2RenderingContext | null = null;
   private program: WebGLProgram | null = null;
 
-  private eye = new THREE.Vector3(20, 20, 10);
+  private eye = new THREE.Vector3(20, 20, 20);
   private forward = new THREE.Vector3();
   private up = new THREE.Vector3(0, 0, 1);
   private right = new THREE.Vector3();
@@ -155,26 +155,29 @@ export class RayCasting {
     );
 
     const L = (name: string) => gl.getUniformLocation(program, name);
+    const RInv = new THREE.Matrix3(
+      this.e1.x,
+      this.e1.y,
+      this.e1.z,
+      this.e2.x,
+      this.e2.y,
+      this.e2.z,
+      this.e3.x,
+      this.e3.y,
+      this.e3.z
+    );
+    const inObjectSpace = (v: THREE.Vector3): THREE.Vector3 => {
+      return v.clone().applyMatrix3(RInv);
+    };
 
     gl.uniform1i(L(`volume`), 0);
     gl.uniform2fv(L(`viewport`), new Float32Array([width, height]));
-    gl.uniformMatrix3fv(
-      L(`R_inv`),
-      false,
-      new Float32Array(
-        [
-          [this.e1.x, this.e2.x, this.e3.x],
-          [this.e1.y, this.e2.y, this.e3.y],
-          [this.e1.z, this.e2.z, this.e3.z],
-        ].flat()
-      )
-    );
     gl.uniform1f(L(`focus`), this.focus);
     gl.uniform1f(L(`fov`), this.fov);
-    gl.uniform3fv(L(`eye`), new Float32Array(this.eye));
-    gl.uniform3fv(L(`forward`), new Float32Array(this.forward));
-    gl.uniform3fv(L(`up`), new Float32Array(this.up));
-    gl.uniform3fv(L(`right`), new Float32Array(this.right));
+    gl.uniform3fv(L(`eye`), new Float32Array(inObjectSpace(this.eye)));
+    gl.uniform3fv(L(`forward`), new Float32Array(inObjectSpace(this.forward)));
+    gl.uniform3fv(L(`up`), new Float32Array(inObjectSpace(this.up)));
+    gl.uniform3fv(L(`right`), new Float32Array(inObjectSpace(this.right)));
 
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);

@@ -2,7 +2,6 @@
 precision mediump float;
 
 uniform sampler2D UV;
-uniform sampler2D F;
 uniform float N;
 uniform float c;
 uniform float h;
@@ -17,8 +16,6 @@ void main() {
   texture(UV, vec2(mod(x, N) / N, (mod(z, N) * N + mod(y, N)) / (N * N))).x
 #define v(x, y, z)                                                             \
   texture(UV, vec2(mod(x, N) / N, (mod(z, N) * N + mod(y, N)) / (N * N))).y
-#define f(x, y, z)                                                             \
-  texture(F, vec2(mod(x, N) / N, (mod(z, N) * N + mod(y, N)) / (N * N))).x
 
   float x = gl_FragCoord.x;
   float y = mod(gl_FragCoord.y, N);
@@ -35,7 +32,7 @@ void main() {
       (u(x, y, z - 1.0) - 2.0 * u(x, y, z) + u(x, y, z + 1.0)) / (h * h);
 
   float dudt = v(x, y, z);
-  float dvdt = c * (d2udx2 + d2udy2 + d2udz2) + f(x, y, z); // wave equation
+  float dvdt = c * (d2udx2 + d2udy2 + d2udz2); // wave equation
 
   fragColor.x = u(x, y, z) + dt * dudt;
   fragColor.y = v(x, y, z) + dt * dvdt;

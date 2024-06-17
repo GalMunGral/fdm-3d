@@ -1,4 +1,4 @@
-import { createProgramFromScripts } from "./utils";
+import { clamp, createProgramFromScripts } from "./utils";
 
 export class FDM {
   private gl: WebGL2RenderingContext | null = null;
@@ -9,14 +9,15 @@ export class FDM {
   private fTexture: WebGLTexture | null = null;
   private t = 0;
 
+  public initialized: Promise<void>;
+
   constructor(
     private N: int,
     private h: float,
     private dt: float,
-    private c: float,
-    private source: (t: float) => Array<float>
+    private c: float
   ) {
-    (async () => {
+    this.initialized = (async () => {
       this.UV = new Float32Array(N * N * N * 2).fill(0);
 
       const canvas = new OffscreenCanvas(1, 1);
@@ -54,7 +55,7 @@ export class FDM {
         gl.STATIC_DRAW
       );
 
-      function createGrid(init: Float32Array): WebGLTexture | null {
+      function createGrid(init: Array<float>): WebGLTexture | null {
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texImage2D(
@@ -66,7 +67,7 @@ export class FDM {
           0,
           gl.RG,
           gl.FLOAT,
-          init,
+          new Float32Array(init),
           0
         );
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -76,8 +77,8 @@ export class FDM {
         return texture;
       }
 
-      this.texture0 = createGrid(new Float32Array(N * N * N * 2).fill(0));
-      this.texture1 = createGrid(new Float32Array(N * N * N * 2).fill(0));
+      this.texture0 = createGrid(Array(N * N * N * 2).fill(0));
+      this.texture1 = createGrid(Array(N * N * N * 2).fill(0));
 
       this.fTexture = gl.createTexture();
       gl.activeTexture(gl.TEXTURE1);
@@ -87,11 +88,37 @@ export class FDM {
 
       const fb = gl.createFramebuffer();
       gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        this.texture1,
+        0
+      );
     })();
   }
 
   private swapBuffers() {
     [this.texture0, this.texture1] = [this.texture1, this.texture0];
+  }
+
+  public reset(initial: Array<float>) {
+    const { gl, texture0, N } = this;
+    if (!gl) return;
+
+    gl.bindTexture(gl.TEXTURE_2D, this.texture0);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RG32F,
+      N,
+      N * N,
+      0,
+      gl.RG,
+      gl.FLOAT,
+      new Float32Array(initial.flatMap((v) => [v, 0])),
+      0
+    );
   }
 
   public step(n: int) {
@@ -108,20 +135,6 @@ export class FDM {
     gl.uniform1f(gl.getUniformLocation(program, "c"), c);
 
     while (n--) {
-      gl.activeTexture(gl.TEXTURE1);
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.R32F,
-        N,
-        N * N,
-        0,
-        gl.RED,
-        gl.FLOAT,
-        new Float32Array(this.source(this.t)),
-        0
-      );
-
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.texture0);
 
@@ -156,12 +169,17 @@ export class FDM {
     for (let i = 0; i < N; ++i) {
       for (let j = 0; j < N; ++j) {
         for (let k = 0; k < N; ++k) {
-          const t = (this.UV[index(i, j, k) * 2] - min) / (max - min);
+          const t = clamp(
+            (this.UV[index(i, j, k) * 2] - min) / (max - min),
+            0,
+            1
+          );
           const color = transfer(t);
           const base = index(i, j, k) * 4;
           result[base] = color.r;
           result[base + 1] = color.g;
           result[base + 2] = color.b;
+          result[base + 3] = (0.2 + 0.8 * t) * 0.05 * 255;
         }
       }
     }
