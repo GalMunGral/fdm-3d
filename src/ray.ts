@@ -15,7 +15,7 @@ import { RayCasting } from "./RayCasting";
   const h = 1;
   const dt = 0.01;
 
-  const c = 2;
+  const c = 5;
 
   const M = 10;
   const amplitude = 100;

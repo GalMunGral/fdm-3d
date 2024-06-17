@@ -5,12 +5,12 @@ export class RayCasting {
   private gl: WebGL2RenderingContext | null = null;
   private program: WebGLProgram | null = null;
 
-  private eye = new THREE.Vector3(20, 20, 20);
+  private eye = new THREE.Vector3(20, 20, 10);
   private forward = new THREE.Vector3();
   private up = new THREE.Vector3(0, 0, 1);
   private right = new THREE.Vector3();
   private focus = 0.1;
-  private fov = Math.PI / 4;
+  private fov = Math.PI / 3;
 
   private e1 = new THREE.Vector3(1, 0, 0);
   private e2 = new THREE.Vector3(0, 1, 0);

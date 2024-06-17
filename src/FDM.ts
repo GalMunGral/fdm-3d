@@ -179,7 +179,7 @@ export class FDM {
           result[base] = color.r;
           result[base + 1] = color.g;
           result[base + 2] = color.b;
-          result[base + 3] = (0.2 + 0.8 * t) * 0.05 * 255;
+          result[base + 3] = (0.5 + 0.5 * t) * 0.05 * 255;
         }
       }
     }
