@@ -1,167 +1,93 @@
-import { correctCameraUp, makeGrid } from "./utils";
-import { FDM } from "./FDM";
 import * as THREE from "three";
+import * as d3 from "d3";
 
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(
-  50,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
+import { FDM } from "./FDM";
+import { rand } from "./utils";
+import { RayMarching } from "./RM";
 
-const renderer = new THREE.WebGLRenderer();
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+(async function main() {
+  const canvas = document.querySelector("canvas")!;
+  const renderer = new RayMarching(canvas);
 
-const light = new THREE.AmbientLight(0xffffff, 0.5);
-scene.add(light);
+  const transfer = (t: float) => d3.rgb(d3.interpolateInferno(t));
 
-const directionalLight1 = new THREE.DirectionalLight(0xffffff);
-scene.add(directionalLight1);
+  const N = 25;
+  const h = 1;
+  const dt = 0.01;
 
-const directionalLight2 = new THREE.DirectionalLight(0xffff00);
-directionalLight2.position.set(1, 0, 1);
-scene.add(directionalLight2);
+  const c = 5;
 
-// camera
+  const M = 10;
+  const amplitude = 100;
+  const radius = 0.5;
 
-let pointerDown = false;
-let prevX = -1;
-let prevY = -1;
-window.addEventListener("pointerdown", (e) => {
-  pointerDown = true;
-  prevX = e.clientX;
-  prevY = e.clientY;
-});
-window.addEventListener("pointerup", () => (pointerDown = false));
-window.addEventListener("pointermove", (e) => {
-  if (pointerDown) {
-    function toDir(x: number, y: number) {
-      const rect = renderer.domElement.getBoundingClientRect();
-      const z = camera.position
-        .clone()
-        .normalize()
-        .multiplyScalar(0.25)
-        .project(camera).z;
+  const min = 0;
+  const max = 50;
 
-      return new THREE.Vector3(
-        ((x - rect.left) / rect.width) * 2 - 1,
-        ((rect.bottom - y) / rect.height) * 2 - 1,
-        z
-      )
-        .unproject(camera)
-        .normalize();
-    }
+  const data = new Uint8Array(N * N * N * 4);
+  const sol = new FDM(N, h, dt, c);
 
-    const quaternion = new THREE.Quaternion();
-    quaternion.setFromUnitVectors(
-      toDir(e.clientX, e.clientY),
-      toDir(prevX, prevY)
-    );
+  await sol.initialized;
 
-    camera.position.applyQuaternion(quaternion);
-    correctCameraUp(camera);
-    camera.lookAt(new THREE.Vector3());
+  let rafHandle = -1;
+  (function reset() {
+    cancelAnimationFrame(rafHandle);
 
-    prevX = e.clientX;
-    prevY = e.clientY;
-  }
-});
+    sol.reset(initialValues(N, M, radius, amplitude));
 
-let rafHandle = -1;
-let mesh: THREE.Mesh | null = null;
+    let prev = -1;
+    rafHandle = requestAnimationFrame(function frame(t: DOMHighResTimeStamp) {
+      if (prev < 0) prev = t;
+      const dt = t - prev;
 
-const vertexShaderSource = await (await fetch("./vol_vert.glsl")).text();
-const fragmentShaderSource = await (await fetch("./vol_frag.glsl")).text();
+      const steps = Math.min(10, Math.round(dt / 10));
+      sol.step(steps);
+      sol.visualize(data, transfer, min, max);
 
-(async function restart() {
-  cancelAnimationFrame(rafHandle);
+      renderer.render(data, N, dt);
+      renderer.rotateAboutZ(0.0005 * dt);
 
-  camera.position.set(1.5, 1.5, 1.5);
-  camera.lookAt(new THREE.Vector3());
-  camera.up.set(0, 0, 1);
-
-  const Sol = await FDM(40, 1, 0.001);
-
-  let prev = -1;
-  let totalSteps = 0;
-
-  rafHandle = requestAnimationFrame(function render(t) {
-    if (prev < 0) prev = t;
-
-    const steps = Math.min(10, Math.round((t - prev) / 10));
-    Sol.step(steps);
-    totalSteps += steps;
-    prev = t;
-
-    if (!pointerDown) {
-      camera.position.applyAxisAngle(camera.up, 0.005 * steps);
-      camera.lookAt(new THREE.Vector3());
-    }
-
-    prev = t;
-
-    scene.remove(mesh);
-    mesh = makeSlices(Sol.toTexture());
-    scene.add(mesh);
-    renderer.render(scene, camera);
-
-    rafHandle = requestAnimationFrame(render);
-  });
-
-  setTimeout(restart, 20000);
+      prev = t;
+      rafHandle = requestAnimationFrame(frame);
+    });
+    setTimeout(reset, 5 * 1000);
+  })();
 })();
 
-function makeSlices(texture: THREE.Data3DTexture) {
-  const W = 10;
-  const L = 200;
-  const vertices: number[] = [];
-  const indices: number[] = [];
+function initialValues(
+  N: int,
+  M: int,
+  radius: float,
+  amplitude: float
+): Array<float> {
+  const center = new THREE.Vector3(0.5, 0.5, 0.5);
+  const gaussians: Array<[float, float, float, float]> = [];
 
-  const quaternion = new THREE.Quaternion();
-  quaternion.setFromUnitVectors(
-    new THREE.Vector3(0, 0, 1),
-    camera.position.clone().normalize()
-  );
-
-  for (let i = 0; i < L; ++i) {
-    const z = -1 + (2 / L) * i;
-    vertices.push(
-      ...[
-        [-W, W, z],
-        [W, W, z],
-        [W, -W, z],
-        [-W, -W, z],
-      ]
-        .map(([x, y, z]) =>
-          new THREE.Vector3(x, y, z).applyQuaternion(quaternion)
-        )
-        .flatMap((p) => [p.x, p.y, p.z])
-    );
-    indices.push(...[3, 1, 0, 1, 3, 2].map((j) => 4 * i + j));
+  for (let i = 0; i < M; ++i) {
+    let point = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+    while (point.distanceTo(center) > radius) {
+      point = new THREE.Vector3(Math.random(), Math.random(), Math.random());
+    }
+    point.multiplyScalar(N);
+    gaussians.push([
+      Math.round(point.x),
+      Math.round(point.y),
+      Math.round(point.z),
+      amplitude * rand(0, 2),
+    ]);
   }
 
-  const geometry = new THREE.BufferGeometry();
-  geometry.setIndex(indices);
-  geometry.setAttribute(
-    "position",
-    new THREE.BufferAttribute(new Float32Array(vertices), 3)
-  );
-
-  geometry.computeVertexNormals();
-
-  const material = new THREE.ShaderMaterial({
-    glslVersion: THREE.GLSL3,
-    transparent: true,
-    uniforms: {
-      volume: { value: texture },
-    },
-    vertexShader: vertexShaderSource,
-    fragmentShader: fragmentShaderSource,
-  });
-
-  const mesh = new THREE.Mesh(geometry, material);
-
-  return mesh;
+  return Array(N * N * N)
+    .fill(0)
+    .map((_, idx) => {
+      const i = Math.floor(idx / (N * N));
+      const j = Math.floor(idx / N) % N;
+      const k = idx % N;
+      let u = 0;
+      for (const [ci, cj, ck, ampl] of gaussians) {
+        const rsqrd = (i - ci) ** 2 + (j - cj) ** 2 + (k - ck) ** 2;
+        u += ampl * Math.exp(-0.1 * rsqrd);
+      }
+      return u;
+    });
 }

@@ -1,14 +1,18 @@
 import * as THREE from "three";
 import { createProgramFromScripts } from "./utils";
 
-export class RayCasting {
+export class RayMarching {
   private gl: WebGL2RenderingContext | null = null;
   private program: WebGLProgram | null = null;
 
   private eye = new THREE.Vector3(20, 20, 10);
-  private forward = new THREE.Vector3();
-  private up = new THREE.Vector3(0, 0, 1);
-  private right = new THREE.Vector3();
+  private forward = this.eye.clone().multiplyScalar(-1).normalize();
+  private right = this.forward
+    .clone()
+    .cross(new THREE.Vector3(0, 0, 1))
+    .normalize();
+  private up = this.right.clone().cross(this.forward).normalize();
+
   private focus = 0.1;
   private fov = Math.PI / 3;
 
@@ -23,8 +27,6 @@ export class RayCasting {
 
   constructor(canvas: HTMLCanvasElement) {
     (async () => {
-      this.adjustCameraFrame();
-
       const r = 1;
       canvas.width = window.innerWidth / r;
       canvas.height = window.innerHeight / r;
@@ -33,8 +35,8 @@ export class RayCasting {
 
       const program = (this.program = await createProgramFromScripts(
         gl,
-        "./ray_vert.glsl",
-        "./ray_frag.glsl"
+        "./RM_vertex.glsl",
+        "./RM_fragment.glsl"
       ));
 
       const vertices = [-1, 1, 1, 1, -1, -1, 1, -1];
@@ -59,10 +61,14 @@ export class RayCasting {
         gl.STATIC_DRAW
       );
 
-      const fTexture = gl.createTexture();
+      const texture = gl.createTexture();
       gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_3D, fTexture);
-      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.bindTexture(gl.TEXTURE_3D, texture);
+      gl.texParameteri(
+        gl.TEXTURE_3D,
+        gl.TEXTURE_MIN_FILTER,
+        gl.LINEAR_MIPMAP_NEAREST
+      );
       gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
       window.addEventListener("keydown", (e) => {
@@ -101,19 +107,13 @@ export class RayCasting {
     })();
   }
 
-  private toDir(x: number, y: number): THREE.Vector3 {
+  private toDir(x: float, y: float): THREE.Vector3 {
     return this.eye
       .clone()
       .multiplyScalar(5)
       .add(this.right.clone().multiplyScalar(x - this.gl.canvas.width / 2))
       .add(this.up.clone().multiplyScalar(-(y - this.gl.canvas.height / 2)))
       .normalize();
-  }
-
-  private adjustCameraFrame() {
-    this.forward = this.eye.clone().multiplyScalar(-1).normalize();
-    this.right = this.forward.clone().cross(this.up).normalize();
-    this.up = this.right.clone().cross(this.forward).normalize();
   }
 
   public rotateAboutZ(angle: float) {
@@ -153,6 +153,7 @@ export class RayCasting {
       gl.UNSIGNED_BYTE,
       texture3d
     );
+    gl.generateMipmap(gl.TEXTURE_3D);
 
     const L = (name: string) => gl.getUniformLocation(program, name);
     const RInv = new THREE.Matrix3(

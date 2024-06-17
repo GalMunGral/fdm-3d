@@ -30,7 +30,7 @@ void main() {
   vec3 p = eye;
   vec3 d = x * right + y * up + focus * forward;
   float w = 5.0;
-  for(int i = 0; i < 1000; ++i) {
+  for(int i = 0; i < 500; ++i) {
     p += d;
     if(abs(p.x) < w && abs(p.y) < w && abs(p.z) < w) {
       vec4 color = texture(volume, vec3(p.x / (2.0 * w) + 0.5, p.y / (2.0 * w) + 0.5, p.z / (2.0 * w) + 0.5));

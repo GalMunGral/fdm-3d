@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
-export function rand(start: number, end: number) {
-  return start + (end - start) * Math.random();
+export function rand(min: float, max: float) {
+  return min + (max - min) * Math.random();
 }
 
 export const makeGrid = (m: int, n: int, fn: (i: int, j: int) => float) =>

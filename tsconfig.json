@@ -5,6 +5,7 @@
     "module": "ESNext",
     "lib": ["ESNext", "DOM"],
     "types": ["./src/types.d.ts"],
-    "noImplicitAny": true
+    "noImplicitAny": true,
+    "moduleResolution": "Node"
   }
 }

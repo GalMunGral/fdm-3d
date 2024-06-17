@@ -27,8 +27,8 @@ export class FDM {
       const gl = (this.gl = canvas.getContext("webgl2")!);
       const program = (this.program = await createProgramFromScripts(
         gl,
-        "./FDM_vert.glsl",
-        "./FDM_frag.glsl"
+        "./FDM_vertex.glsl",
+        "./FDM_fragment.glsl"
       ));
 
       gl.getExtension("EXT_color_buffer_float");
@@ -158,8 +158,8 @@ export class FDM {
   public visualize(
     result: Uint8Array,
     transfer: (t: float) => { r: int; g: int; b: int },
-    min: number,
-    max: number
+    min: float,
+    max: float
   ): void {
     const { gl, N } = this;
     if (!gl) return;

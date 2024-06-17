@@ -1,6 +1,6 @@
 {
   "scripts": {
-    "build": "cp src/*.glsl dist && esbuild ./src/ray.ts --format=esm --outdir=dist --bundle",
+    "build": "cp -r src/*.glsl dist && esbuild ./src/index.ts --format=esm --outdir=dist --bundle",
     "dev": "npm run build -- --watch"
   },
   "devDependencies": {
